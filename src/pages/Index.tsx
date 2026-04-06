@@ -1,16 +1,57 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useEffect } from "react";
+import { getSesion, loginCliente, loginChofer, type Cliente, type Chofer } from "@/lib/taxiya-store";
+import { ToastProvider } from "@/components/taxiya/Toast";
+import HeroView from "@/components/taxiya/HeroView";
+import AuthCliente from "@/components/taxiya/AuthCliente";
+import AuthChofer from "@/components/taxiya/AuthChofer";
+import DashboardCliente from "@/components/taxiya/DashboardCliente";
+import DashboardChofer from "@/components/taxiya/DashboardChofer";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+type Vista = "hero" | "auth-cliente" | "auth-chofer" | "dash-cliente" | "dash-chofer";
+
+export default function Index() {
+  const [vista, setVista] = useState<Vista>("hero");
+  const [cliente, setCliente] = useState<Cliente | null>(null);
+  const [chofer, setChofer] = useState<Chofer | null>(null);
+
+  // Detectar sesión activa al cargar
+  useEffect(() => {
+    const sesion = getSesion();
+    if (!sesion) return;
+    if (sesion.tipo === "cliente") {
+      const c = loginCliente(sesion.id);
+      if (c) { setCliente(c); setVista("dash-cliente"); }
+    } else {
+      const ch = loginChofer(sesion.id);
+      if (ch) { setChofer(ch); setVista("dash-chofer"); }
+    }
+  }, []);
+
+  const handleLogout = () => {
+    setCliente(null);
+    setChofer(null);
+    setVista("hero");
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
-    </div>
+    <ToastProvider>
+      <div className="min-h-screen">
+        {vista === "hero" && (
+          <HeroView onClienteClick={() => setVista("auth-cliente")} onChoferClick={() => setVista("auth-chofer")} />
+        )}
+        {vista === "auth-cliente" && (
+          <AuthCliente onBack={() => setVista("hero")} onLogin={(c) => { setCliente(c); setVista("dash-cliente"); }} />
+        )}
+        {vista === "auth-chofer" && (
+          <AuthChofer onBack={() => setVista("hero")} onLogin={(ch) => { setChofer(ch); setVista("dash-chofer"); }} />
+        )}
+        {vista === "dash-cliente" && cliente && (
+          <DashboardCliente cliente={cliente} onLogout={handleLogout} />
+        )}
+        {vista === "dash-chofer" && chofer && (
+          <DashboardChofer chofer={chofer} onLogout={handleLogout} />
+        )}
+      </div>
+    </ToastProvider>
   );
-};
-
-const Index = PlaceholderIndex;
-
-export default Index;
+}
