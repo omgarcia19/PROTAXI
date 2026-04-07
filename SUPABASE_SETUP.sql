@@ -1,5 +1,11 @@
+-- Limpiar tablas existentes (por orden de dependencias)
+DROP TABLE IF EXISTS calificaciones CASCADE;
+DROP TABLE IF EXISTS reservaciones CASCADE;
+DROP TABLE IF EXISTS choferes CASCADE;
+DROP TABLE IF EXISTS clientes CASCADE;
+
 -- Crear tabla de clientes
-CREATE TABLE clientes (
+CREATE TABLE IF NOT EXISTS clientes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre TEXT NOT NULL,
   telefono TEXT NOT NULL UNIQUE,
@@ -17,7 +23,7 @@ CREATE TABLE clientes (
 );
 
 -- Crear tabla de choferes
-CREATE TABLE choferes (
+CREATE TABLE IF NOT EXISTS choferes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre TEXT NOT NULL,
   telefono TEXT NOT NULL UNIQUE,
@@ -42,7 +48,7 @@ CREATE TABLE choferes (
 );
 
 -- Crear tabla de reservaciones (normalizada)
-CREATE TABLE reservaciones (
+CREATE TABLE IF NOT EXISTS reservaciones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cliente_id UUID NOT NULL,
   chofer_id UUID,
@@ -67,7 +73,7 @@ CREATE TABLE reservaciones (
 );
 
 -- Crear tabla de calificaciones
-CREATE TABLE calificaciones (
+CREATE TABLE IF NOT EXISTS calificaciones (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   reservacion_id UUID NOT NULL,
   cliente_id UUID,
@@ -82,19 +88,19 @@ CREATE TABLE calificaciones (
 );
 
 -- Crear índices para better performance
-CREATE INDEX idx_clientes_telefono ON clientes(telefono);
-CREATE INDEX idx_clientes_estado ON clientes(estado_cliente);
+CREATE INDEX IF NOT EXISTS idx_clientes_telefono ON clientes(telefono);
+CREATE INDEX IF NOT EXISTS idx_clientes_estado ON clientes(estado_cliente);
 
-CREATE INDEX idx_choferes_telefono ON choferes(telefono);
-CREATE INDEX idx_choferes_placas ON choferes(placas);
-CREATE INDEX idx_choferes_disponible ON choferes(disponible);
-CREATE INDEX idx_choferes_estado ON choferes(estado_chofer);
+CREATE INDEX IF NOT EXISTS idx_choferes_telefono ON choferes(telefono);
+CREATE INDEX IF NOT EXISTS idx_choferes_placas ON choferes(placas);
+CREATE INDEX IF NOT EXISTS idx_choferes_disponible ON choferes(disponible);
+CREATE INDEX IF NOT EXISTS idx_choferes_estado ON choferes(estado_chofer);
 
-CREATE INDEX idx_reservaciones_cliente_id ON reservaciones(cliente_id);
-CREATE INDEX idx_reservaciones_chofer_id ON reservaciones(chofer_id);
-CREATE INDEX idx_reservaciones_estatus ON reservaciones(estatus);
-CREATE INDEX idx_reservaciones_fecha ON reservaciones(fecha);
+CREATE INDEX IF NOT EXISTS idx_reservaciones_cliente_id ON reservaciones(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_reservaciones_chofer_id ON reservaciones(chofer_id);
+CREATE INDEX IF NOT EXISTS idx_reservaciones_estatus ON reservaciones(estatus);
+CREATE INDEX IF NOT EXISTS idx_reservaciones_fecha ON reservaciones(fecha);
 
-CREATE INDEX idx_calificaciones_reservacion ON calificaciones(reservacion_id);
-CREATE INDEX idx_calificaciones_cliente ON calificaciones(cliente_id);
-CREATE INDEX idx_calificaciones_chofer ON calificaciones(chofer_id);
+CREATE INDEX IF NOT EXISTS idx_calificaciones_reservacion ON calificaciones(reservacion_id);
+CREATE INDEX IF NOT EXISTS idx_calificaciones_cliente ON calificaciones(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_calificaciones_chofer ON calificaciones(chofer_id);
