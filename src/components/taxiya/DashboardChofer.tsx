@@ -6,6 +6,7 @@ import {
   confirmarReservacion,
   cerrarSesion,
 } from "@/lib/taxiya-store";
+import { obtenerReservacionesSupabase, confirmarReservacionSupabase } from "@/utils/supabase-reservaciones";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -16,14 +17,26 @@ interface Props {
 export default function DashboardChofer({ chofer, onLogout }: Props) {
   const { show } = useToast();
   const [reservaciones, setReservaciones] = useState<Reservacion[]>([]);
+  const [cargando, setCargando] = useState(true);
 
-  const refresh = useCallback(() => {
-    setReservaciones(getReservaciones());
+  const refresh = useCallback(async () => {
+    try {
+      // Obtener de Supabase
+      const data = await obtenerReservacionesSupabase();
+      setReservaciones(data);
+    } catch (error) {
+      console.error("Error al cargar reservaciones:", error);
+      // Fallback a localStorage
+      setReservaciones(getReservaciones());
+    }
   }, []);
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 5000);
+    setCargando(false);
+    
+    // Actualizar cada 3 segundos
+    const interval = setInterval(refresh, 3000);
     return () => clearInterval(interval);
   }, [refresh]);
 
@@ -32,16 +45,39 @@ export default function DashboardChofer({ chofer, onLogout }: Props) {
     (r) => r.choferAsignado?.placas === chofer.placas
   );
 
-  const handleConfirmar = (id: string) => {
-    confirmarReservacion(id, {
-      nombre: chofer.nombre,
-      placas: chofer.placas,
-      marca: chofer.marca,
-      modelo: chofer.modelo,
-      foto: chofer.foto,
-    });
-    refresh();
-    show("✅ ¡Servicio confirmado!");
+  const handleConfirmar = async (id: string) => {
+    try {
+      // Confirmar en Supabase
+      const ok = await confirmarReservacionSupabase(
+        id,
+        chofer.placas,
+        chofer.nombre,
+        chofer.marca,
+        chofer.modelo,
+        chofer.foto
+      );
+
+      if (!ok) {
+        show("❌ Este servicio ya fue tomado por otro conductor", "error");
+        refresh();
+        return;
+      }
+
+      // También actualizar localStorage como backup
+      confirmarReservacion(id, {
+        nombre: chofer.nombre,
+        placas: chofer.placas,
+        marca: chofer.marca,
+        modelo: chofer.modelo,
+        foto: chofer.foto,
+      });
+
+      refresh();
+      show("✅ ¡Servicio confirmado!");
+    } catch (error) {
+      console.error("Error al confirmar:", error);
+      show("❌ Error al confirmar el servicio", "error");
+    }
   };
 
   const handleLogout = () => {

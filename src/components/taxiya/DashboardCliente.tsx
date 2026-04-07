@@ -7,6 +7,7 @@ import {
   generarId,
   cerrarSesion,
 } from "@/lib/taxiya-store";
+import { crearReservacionSupabase } from "@/utils/supabase-reservaciones";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -172,12 +173,13 @@ function ModalReservar({
     );
   };
 
-  const confirmar = () => {
+  const confirmar = async () => {
     if (!fecha || !hora || !domicilio) {
       show("Completa fecha, hora y domicilio", "error");
       return;
     }
-    crearReservacion({
+    
+    const nuevaReservacion: Reservacion = {
       id: generarId(),
       clienteNombre: cliente.nombre,
       clienteTelefono: cliente.telefono,
@@ -189,7 +191,18 @@ function ModalReservar({
       estatus: "pendiente",
       choferAsignado: null,
       timestamp: Date.now(),
-    });
+    };
+
+    // Guardar en Supabase
+    const ok = await crearReservacionSupabase(nuevaReservacion);
+    
+    if (!ok) {
+      show("Error al guardar la reservación. Intenta de nuevo.", "error");
+      return;
+    }
+
+    // También guardar en localStorage como backup
+    crearReservacion(nuevaReservacion);
     onCreated();
   };
 

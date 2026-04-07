@@ -23,8 +23,61 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
-    reader.onload = () => setFotoPreview(reader.result as string);
+    reader.onload = (event) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          // Comprimir imagen progresivamente
+          let quality = 0.85;
+          let size = 350;
+          let compressed = "";
+          
+          while (quality > 0.3) {
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.fillStyle = "#fff";
+              ctx.fillRect(0, 0, size, size);
+              ctx.drawImage(img, 0, 0, size, size);
+              compressed = canvas.toDataURL("image/jpeg", quality);
+            }
+            
+            // Si cabe ahora, usar esta compresión
+            if (compressed.length < 800 * 1024) {
+              setFotoPreview(compressed);
+              const sizeMB = (compressed.length / 1024 / 1024).toFixed(2);
+              show(`✅ Foto procesada (${sizeMB}MB)`);
+              return;
+            }
+            
+            // Si no cabe, reducir calidad
+            quality -= 0.15;
+            size = Math.max(200, size - 50);
+          }
+          
+          show("⚠️ No se puede comprimir más la foto. Intenta con una imagen diferente.", "error");
+        };
+        
+        img.onerror = () => {
+          show("❌ No se pudo procesar la imagen", "error");
+        };
+        
+        img.src = event.target?.result as string;
+      } catch (error) {
+        show("❌ Error al procesar la foto", "error");
+        console.error(error);
+      }
+    };
+    
+    if (file.size > 10 * 1024 * 1024) {
+      show("❌ Archivo demasiado grande (máx 10MB)", "error");
+      return;
+    }
+    
     reader.readAsDataURL(file);
   };
 
@@ -42,11 +95,40 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
       show("Completa todos los campos y sube tu foto", "error");
       return;
     }
-    const ok = registrarChofer({ nombre, placas: placas.toUpperCase(), modelo, marca, foto: fotoPreview });
-    if (!ok) { show("Esas placas ya están registradas", "error"); return; }
-    show("¡Registro exitoso!");
-    setTab("login");
-    setPlacasLogin(placas.toUpperCase());
+    
+    // Validar que fotoPreview no sea demasiado grande
+    if (fotoPreview.length > 1024 * 1024) {
+      show("Comprimiendo foto nuevamente...", "error");
+      return;
+    }
+
+    try {
+      const ok = registrarChofer({ 
+        nombre, 
+        placas: placas.toUpperCase(), 
+        modelo, 
+        marca, 
+        foto: fotoPreview 
+      });
+      
+      if (!ok) { 
+        show("❌ Esas placas ya están registradas", "error"); 
+        return; 
+      }
+      
+      show("✅ ¡Registro exitoso!");
+      setTab("login");
+      setPlacasLogin(placas.toUpperCase());
+      // Limpiar formulario
+      setNombre("");
+      setPlacas("");
+      setModelo("");
+      setMarca("");
+      setFotoPreview("");
+    } catch (error) {
+      console.error("Error al registrar:", error);
+      show("❌ Error al procesar el registro. Intenta de nuevo.", "error");
+    }
   };
 
   const inputClass = "w-full px-4 py-3 rounded-xl border border-border bg-card font-body text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
