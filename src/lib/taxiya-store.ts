@@ -31,6 +31,7 @@ export interface Reservacion {
     marca: string;
     modelo: string;
     foto: string;
+    telefono?: string;
   } | null;
   timestamp: number;
 }

@@ -50,11 +50,7 @@ export default function DashboardChofer({ chofer, onLogout }: Props) {
       // Confirmar en Supabase
       const ok = await confirmarReservacionSupabase(
         id,
-        chofer.placas,
-        chofer.nombre,
-        chofer.marca,
-        chofer.modelo,
-        chofer.foto
+        chofer.placas
       );
 
       if (!ok) {

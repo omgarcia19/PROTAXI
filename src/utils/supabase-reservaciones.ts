@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { cambiarDisponibilidad } from './supabase-choferes';
-import type { Reservacion } from './taxiya-store';
+import type { Reservacion } from '@/lib/taxiya-store';
 
 export interface ReservacionDB {
   id?: string;
@@ -24,17 +24,27 @@ export interface ReservacionDB {
 
 export async function crearReservacionSupabase(r: Reservacion): Promise<boolean> {
   try {
+    // Buscar el cliente_id por teléfono
+    const { data: clienteData, error: clienteError } = await supabase
+      .from('clientes')
+      .select('id')
+      .eq('telefono', r.clienteTelefono)
+      .single();
+
+    if (clienteError || !clienteData) {
+      console.error('Error al buscar cliente por teléfono:', clienteError);
+      return false;
+    }
+
     const { error } = await supabase
       .from('reservaciones')
       .insert({
-        id: r.id,
-        cliente_nombre: r.clienteNombre,
-        cliente_telefono: r.clienteTelefono,
+        cliente_id: clienteData.id,
         fecha: r.fecha,
         hora: r.hora,
-        domicilio: r.domicilio,
-        lat: r.coordenadas?.lat,
-        lon: r.coordenadas?.lon,
+        domicilio_origen: r.domicilio,
+        lat_origen: r.coordenadas?.lat,
+        lon_origen: r.coordenadas?.lon,
         notas: r.notas,
         estatus: r.estatus,
         timestamp: r.timestamp,
@@ -56,7 +66,7 @@ export async function obtenerReservacionesSupabase(): Promise<Reservacion[]> {
   try {
     const { data, error } = await supabase
       .from('reservaciones')
-      .select('*')
+      .select('*, cliente:clientes(nombre, telefono), chofer:choferes(nombre, telefono, placas, marca, modelo, foto_perfil)')
       .order('timestamp', { ascending: false });
 
     if (error) {
@@ -66,20 +76,21 @@ export async function obtenerReservacionesSupabase(): Promise<Reservacion[]> {
 
     return (data || []).map(row => ({
       id: row.id,
-      clienteNombre: row.cliente_nombre,
-      clienteTelefono: row.cliente_telefono,
+      clienteNombre: row.cliente?.nombre || '',
+      clienteTelefono: row.cliente?.telefono || '',
       fecha: row.fecha,
       hora: row.hora,
-      domicilio: row.domicilio,
-      coordenadas: row.lat && row.lon ? { lat: row.lat, lon: row.lon } : null,
+      domicilio: row.domicilio_origen,
+      coordenadas: row.lat_origen && row.lon_origen ? { lat: row.lat_origen, lon: row.lon_origen } : null,
       notas: row.notas,
       estatus: row.estatus,
-      choferAsignado: row.chofer_placas ? {
-        nombre: row.chofer_nombre,
-        placas: row.chofer_placas,
-        marca: row.chofer_marca,
-        modelo: row.chofer_modelo,
-        foto: row.chofer_foto,
+      choferAsignado: row.chofer ? {
+        nombre: row.chofer.nombre,
+        placas: row.chofer.placas,
+        marca: row.chofer.marca,
+        modelo: row.chofer.modelo,
+        foto: row.chofer.foto_perfil || '',
+        telefono: row.chofer.telefono || '',
       } : null,
       timestamp: row.timestamp,
     }));
@@ -115,25 +126,30 @@ export async function actualizarEstatusReservacionSupabase(
 
 export async function confirmarReservacionSupabase(
   id: string,
-  choferPlacas: string,
-  choferNombre: string,
-  choferMarca: string,
-  choferModelo: string,
-  choferFoto: string
+  choferPlacas: string
 ): Promise<boolean> {
   try {
+    // Buscar chofer_id por placas
+    const { data: choferData, error: choferError } = await supabase
+      .from('choferes')
+      .select('id')
+      .eq('placas', choferPlacas)
+      .single();
+
+    if (choferError || !choferData) {
+      console.error('Error al buscar chofer por placas:', choferError);
+      return false;
+    }
+
     const { error } = await supabase
       .from('reservaciones')
       .update({
         estatus: 'confirmada',
-        chofer_placas: choferPlacas,
-        chofer_nombre: choferNombre,
-        chofer_marca: choferMarca,
-        chofer_modelo: choferModelo,
-        chofer_foto: choferFoto,
+        chofer_id: choferData.id,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('estatus', 'pendiente'); // Solo actualizar si sigue pendiente
+      .eq('estatus', 'pendiente');
 
     if (error) {
       console.error('Error al confirmar reservación:', error);

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { registrarChofer, loginChofer, setSesion, type Chofer } from "@/lib/taxiya-store";
+import { obtenerChoferPorPlacas, crearChofer as crearChoferSupabase } from "@/utils/supabase-choferes";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -17,6 +18,7 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
   const [placas, setPlacas] = useState("");
   const [modelo, setModelo] = useState("");
   const [marca, setMarca] = useState("");
+  const [telefonoReg, setTelefonoReg] = useState("");
   const [fotoPreview, setFotoPreview] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -81,18 +83,61 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
     reader.readAsDataURL(file);
   };
 
-  const handleLogin = () => {
+  const [loadingLogin, setLoadingLogin] = useState(false);
+
+  const handleLogin = async () => {
     if (!placasLogin) { show("Ingresa las placas", "error"); return; }
-    const c = loginChofer(placasLogin);
-    if (!c) { show("Placas no encontradas. Regístrate primero.", "error"); return; }
-    setSesion({ tipo: "chofer", id: c.placas });
-    show(`¡Bienvenido, ${c.nombre}!`);
-    onLogin(c);
+    
+    // Primero intentar en localStorage
+    const local = loginChofer(placasLogin);
+    if (local) {
+      setSesion({ tipo: "chofer", id: local.placas });
+      show(`¡Bienvenido, ${local.nombre}!`);
+      onLogin(local);
+      return;
+    }
+
+    // Si no está en localStorage, buscar en Supabase
+    setLoadingLogin(true);
+    try {
+      const { data } = await obtenerChoferPorPlacas(placasLogin.toUpperCase());
+      if (!data) {
+        show("Placas no encontradas. Regístrate primero.", "error");
+        setLoadingLogin(false);
+        return;
+      }
+
+      // Mapear datos de Supabase al formato local
+      const chofer: Chofer = {
+        nombre: data.nombre,
+        placas: data.placas,
+        marca: data.marca,
+        modelo: data.modelo,
+        foto: data.foto_perfil || "",
+      };
+
+      // Guardar en localStorage para uso futuro
+      registrarChofer(chofer);
+      setSesion({ tipo: "chofer", id: chofer.placas });
+      show(`¡Bienvenido, ${chofer.nombre}!`);
+      onLogin(chofer);
+    } catch (err) {
+      console.error("Error al buscar chofer en Supabase:", err);
+      show("Error al conectar. Intenta de nuevo.", "error");
+    } finally {
+      setLoadingLogin(false);
+    }
   };
 
-  const handleRegistro = () => {
-    if (!nombre || !placas || !modelo || !marca || !fotoPreview) {
+  const [loadingRegistro, setLoadingRegistro] = useState(false);
+
+  const handleRegistro = async () => {
+    if (!nombre || !telefonoReg || !placas || !modelo || !marca || !fotoPreview) {
       show("Completa todos los campos y sube tu foto", "error");
+      return;
+    }
+    if (telefonoReg.length !== 10) {
+      show("El teléfono debe tener 10 dígitos", "error");
       return;
     }
     
@@ -102,25 +147,48 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
       return;
     }
 
+    setLoadingRegistro(true);
     try {
-      const ok = registrarChofer({ 
+      const placasNorm = placas.toUpperCase();
+
+      // Guardar en Supabase
+      const { error: supaError } = await crearChoferSupabase({
+        nombre,
+        placas: placasNorm,
+        marca,
+        modelo,
+        telefono: telefonoReg,
+        foto_perfil: fotoPreview,
+      });
+
+      if (supaError) {
+        // Si el error es de placas duplicadas
+        const msg = (supaError as any)?.message || '';
+        if (msg.includes('duplicate') || msg.includes('unique')) {
+          show("❌ Esas placas ya están registradas", "error");
+        } else {
+          console.error("Error Supabase:", supaError);
+          show("❌ Error al registrar. Intenta de nuevo.", "error");
+        }
+        setLoadingRegistro(false);
+        return;
+      }
+
+      // También guardar en localStorage como backup
+      registrarChofer({ 
         nombre, 
-        placas: placas.toUpperCase(), 
+        placas: placasNorm, 
         modelo, 
         marca, 
         foto: fotoPreview 
       });
       
-      if (!ok) { 
-        show("❌ Esas placas ya están registradas", "error"); 
-        return; 
-      }
-      
       show("✅ ¡Registro exitoso!");
       setTab("login");
-      setPlacasLogin(placas.toUpperCase());
+      setPlacasLogin(placasNorm);
       // Limpiar formulario
       setNombre("");
+      setTelefonoReg("");
       setPlacas("");
       setModelo("");
       setMarca("");
@@ -128,6 +196,8 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
     } catch (error) {
       console.error("Error al registrar:", error);
       show("❌ Error al procesar el registro. Intenta de nuevo.", "error");
+    } finally {
+      setLoadingRegistro(false);
     }
   };
 
@@ -158,8 +228,8 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
                 <label className="text-sm font-body font-medium text-foreground mb-1 block">Número de placas</label>
                 <input value={placasLogin} onChange={(e) => setPlacasLogin(e.target.value.toUpperCase())} placeholder="Ej: ABC-123" className={inputClass} />
               </div>
-              <button onClick={handleLogin} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg">
-                Ingresar como Chofer
+              <button onClick={handleLogin} disabled={loadingLogin} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg disabled:opacity-60">
+                {loadingLogin ? "Buscando..." : "Ingresar como Chofer"}
               </button>
             </div>
           ) : (
@@ -167,6 +237,10 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
               <div>
                 <label className="text-sm font-body font-medium text-foreground mb-1 block">Nombre completo *</label>
                 <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre" className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-body font-medium text-foreground mb-1 block">Teléfono (10 dígitos) *</label>
+                <input value={telefonoReg} onChange={(e) => setTelefonoReg(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="5512345678" className={inputClass} />
               </div>
               <div>
                 <label className="text-sm font-body font-medium text-foreground mb-1 block">Placas del vehículo *</label>
@@ -194,8 +268,8 @@ export default function AuthChofer({ onBack, onLogin }: Props) {
                   <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
                 </div>
               </div>
-              <button onClick={handleRegistro} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg">
-                Registrarme como Chofer
+              <button onClick={handleRegistro} disabled={loadingRegistro} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg disabled:opacity-60">
+                {loadingRegistro ? "Registrando..." : "Registrarme como Chofer"}
               </button>
             </div>
           )}
