@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { registrarCliente, loginCliente, setSesion, type Cliente } from "@/lib/taxiya-store";
+import { setSesion } from "@/lib/taxiya-store";
+import { obtenerClientePorTelefono, crearCliente as crearClienteSupabase, type Cliente } from "@/utils/supabase-clientes";
 import { useToast } from "./Toast";
 
 interface Props {
   onBack: () => void;
-  onLogin: (c: Cliente) => void;
+  onLogin: (c: any) => void;
 }
 
 export default function AuthCliente({ onBack, onLogin }: Props) {
   const [tab, setTab] = useState<"login" | "registro">("login");
+  const [cargando, setCargando] = useState(false);
   const { show } = useToast();
 
   // Login
@@ -20,22 +22,31 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
   const [direccion, setDireccion] = useState("");
   const [correo, setCorreo] = useState("");
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!telLogin || telLogin.length !== 10) {
       show("Ingresa un número de 10 dígitos", "error");
       return;
     }
-    const c = loginCliente(telLogin);
-    if (!c) {
-      show("No se encontró ese número. Regístrate primero.", "error");
-      return;
+    
+    setCargando(true);
+    try {
+      const { data: c, error } = await obtenerClientePorTelefono(telLogin);
+      if (error || !c) {
+        show("No se encontró ese número. Regístrate primero.", "error");
+        return;
+      }
+      
+      setSesion({ tipo: "cliente", id: c.telefono });
+      show(`¡Bienvenido/a, ${c.nombre}!`);
+      onLogin(c);
+    } catch (err) {
+      show("Error al iniciar sesión. Intenta de nuevo.", "error");
+    } finally {
+      setCargando(false);
     }
-    setSesion({ tipo: "cliente", id: c.telefono });
-    show(`¡Bienvenido/a, ${c.nombre}!`);
-    onLogin(c);
   };
 
-  const handleRegistro = () => {
+  const handleRegistro = async () => {
     if (!nombre || !telefono || !direccion) {
       show("Completa los campos obligatorios", "error");
       return;
@@ -44,14 +55,37 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
       show("El teléfono debe tener 10 dígitos", "error");
       return;
     }
-    const ok = registrarCliente({ nombre, telefono, direccion, correo: correo || undefined });
-    if (!ok) {
-      show("Ese número ya está registrado", "error");
-      return;
+    
+    setCargando(true);
+    try {
+      // Verificar si el teléfono ya existe
+      const { data: clienteExistente } = await obtenerClientePorTelefono(telefono);
+      if (clienteExistente) {
+        show("Ese número ya está registrado", "error");
+        return;
+      }
+      
+      // Crear cliente en Supabase
+      const { data: nuevoCliente, error } = await crearClienteSupabase({
+        nombre,
+        telefono,
+        domicilio: direccion,
+        email: correo || undefined,
+      });
+      
+      if (error || !nuevoCliente) {
+        show("Error al registrar. Intenta de nuevo.", "error");
+        return;
+      }
+      
+      show("¡Registro exitoso! Ya puedes iniciar sesión.");
+      setTab("login");
+      setTelLogin(telefono);
+    } catch (err) {
+      show("Error al registrar. Intenta de nuevo.", "error");
+    } finally {
+      setCargando(false);
     }
-    show("¡Registro exitoso! Ya puedes iniciar sesión.");
-    setTab("login");
-    setTelLogin(telefono);
   };
 
   const inputClass = (val: string, required = true) =>
@@ -103,8 +137,8 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
                   className={inputClass(telLogin)}
                 />
               </div>
-              <button onClick={handleLogin} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg">
-                Ingresar
+              <button onClick={handleLogin} disabled={cargando} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {cargando ? "⏳ Ingresando..." : "Ingresar"}
               </button>
             </div>
           ) : (
@@ -128,8 +162,8 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
                 </label>
                 <input type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="correo@ejemplo.com" className={inputClass(correo, false)} />
               </div>
-              <button onClick={handleRegistro} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg">
-                Registrarme como Cliente
+              <button onClick={handleRegistro} disabled={cargando} className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-heading font-bold text-lg hover:scale-[1.02] transition-transform shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {cargando ? "⏳ Registrando..." : "Registrarme como Cliente"}
               </button>
             </div>
           )}
