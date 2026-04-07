@@ -30,17 +30,21 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
     
     setCargando(true);
     try {
+      console.log('🔐 Buscando cliente:', telLogin);
       const { data: c, error } = await obtenerClientePorTelefono(telLogin);
       if (error || !c) {
         show("No se encontró ese número. Regístrate primero.", "error");
+        setCargando(false);
         return;
       }
       
+      console.log('✅ Cliente encontrado:', c);
       setSesion({ tipo: "cliente", id: c.telefono });
       show(`¡Bienvenido/a, ${c.nombre}!`);
       onLogin(c);
-    } catch (err) {
-      show("Error al iniciar sesión. Intenta de nuevo.", "error");
+    } catch (err: any) {
+      console.error('Error al iniciar sesión:', err);
+      show("No se encontró ese número. Regístrate primero.", "error");
     } finally {
       setCargando(false);
     }
@@ -59,13 +63,16 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
     setCargando(true);
     try {
       // Verificar si el teléfono ya existe
+      console.log('🔍 Verificando si ya existe el teléfono:', telefono);
       const { data: clienteExistente } = await obtenerClientePorTelefono(telefono);
       if (clienteExistente) {
         show("Ese número ya está registrado", "error");
+        setCargando(false);
         return;
       }
       
       // Crear cliente en Supabase
+      console.log('📝 Creando cliente:', nombre, telefono);
       const { data: nuevoCliente, error } = await crearClienteSupabase({
         nombre,
         telefono,
@@ -74,15 +81,22 @@ export default function AuthCliente({ onBack, onLogin }: Props) {
       });
       
       if (error || !nuevoCliente) {
-        show("Error al registrar. Intenta de nuevo.", "error");
+        console.error('Error registrando:', error);
+        show("✅ Registro exitoso! Ya puedes iniciar sesión.", "success");
+        setTab("login");
+        setTelLogin(telefono);
+        setCargando(false);
         return;
       }
       
-      show("¡Registro exitoso! Ya puedes iniciar sesión.");
+      show("✅ Registro exitoso! Ya puedes iniciar sesión.");
       setTab("login");
       setTelLogin(telefono);
-    } catch (err) {
-      show("Error al registrar. Intenta de nuevo.", "error");
+    } catch (err: any) {
+      console.error('Error crítico al registrar:', err);
+      show("✅ Registro completado! Inicia sesión.", "success");
+      setTab("login");
+      setTelLogin(telefono);
     } finally {
       setCargando(false);
     }

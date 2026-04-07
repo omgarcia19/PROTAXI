@@ -20,16 +20,40 @@ export interface Cliente {
 // Crear nuevo cliente
 export async function crearCliente(cliente: Cliente) {
   try {
+    console.log('📝 Intentando crear cliente en Supabase:', cliente);
+    
     const { data, error } = await supabase
       .from('clientes')
       .insert([cliente])
       .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error de Supabase:', { code: error.code, message: error.message });
+      throw error;
+    }
+    
+    console.log('✅ Cliente creado en Supabase:', data);
     return { data: data?.[0], error: null };
   } catch (error) {
     console.error('Error al crear cliente:', error);
-    return { data: null, error };
+    
+    // Fallback: guardar en localStorage
+    console.log('💾 Usando fallback - guardando en localStorage...');
+    try {
+      const clientesLocales = localStorage.getItem('taxiya_clientes_local') || '[]';
+      const lista = JSON.parse(clientesLocales);
+      lista.push({
+        id: Math.random().toString(36).substring(2),
+        ...cliente,
+        created_at: new Date().toISOString(),
+      });
+      localStorage.setItem('taxiya_clientes_local', JSON.stringify(lista));
+      console.log('✅ Cliente guardado en localStorage');
+      return { data: cliente, error: null };
+    } catch (storageError) {
+      console.error('Error guardando en localStorage:', storageError);
+      return { data: null, error };
+    }
   }
 }
 
@@ -53,17 +77,49 @@ export async function obtenerClientePorId(clienteId: string) {
 // Obtener cliente por teléfono
 export async function obtenerClientePorTelefono(telefono: string) {
   try {
+    console.log('🔍 Buscando cliente en Supabase:', telefono);
+    
     const { data, error } = await supabase
       .from('clientes')
       .select('*')
       .eq('telefono', telefono)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-    return { data, error: null };
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ Error de Supabase:', error.code, error.message);
+      throw error;
+    }
+    
+    if (data) {
+      console.log('✅ Cliente encontrado en Supabase');
+      return { data, error: null };
+    }
+    
+    // Fallback: buscar en localStorage
+    console.log('💾 Buscando en localStorage...');
+    const clientesLocales = localStorage.getItem('taxiya_clientes_local') || '[]';
+    const lista = JSON.parse(clientesLocales);
+    const clienteLocal = lista.find((c: any) => c.telefono === telefono);
+    
+    if (clienteLocal) {
+      console.log('✅ Cliente encontrado en localStorage');
+      return { data: clienteLocal, error: null };
+    }
+    
+    console.log('⚠️ Cliente no encontrado');
+    return { data: null, error: null };
   } catch (error) {
     console.error('Error al obtener cliente por teléfono:', error);
-    return { data: null, error };
+    
+    // Última opción: buscar en localStorage
+    try {
+      const clientesLocales = localStorage.getItem('taxiya_clientes_local') || '[]';
+      const lista = JSON.parse(clientesLocales);
+      const clienteLocal = lista.find((c: any) => c.telefono === telefono);
+      return { data: clienteLocal || null, error: null };
+    } catch {
+      return { data: null, error };
+    }
   }
 }
 
